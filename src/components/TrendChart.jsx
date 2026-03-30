@@ -6,33 +6,29 @@ function buildPath(points) {
   return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
 }
 
-function buildAreaPath(points, bottom) {
-  if (!points.length) return '';
-  const line = buildPath(points);
-  const last = points[points.length - 1];
-  const first = points[0];
-  return `${line} L ${last.x} ${bottom} L ${first.x} ${bottom} Z`;
-}
-
 function getPointStatus(value, spec) {
   if (!Number.isFinite(value) || !spec) return 'neutral';
 
-  if (Number.isFinite(spec.lsl) && Number.isFinite(spec.usl)) {
-    if (value < spec.lsl || value > spec.usl) return 'bad';
-    const margin = (spec.usl - spec.lsl) * 0.1;
-    if (value < spec.lsl + margin || value > spec.usl - margin) return 'warn';
+  const lsl = Number(spec?.lsl);
+  const usl = Number(spec?.usl);
+  const target = Number(spec?.target);
+
+  if (Number.isFinite(lsl) && Number.isFinite(usl)) {
+    if (value < lsl || value > usl) return 'bad';
+    const margin = (usl - lsl) * 0.1;
+    if (value < lsl + margin || value > usl - margin) return 'warn';
     return 'ok';
   }
 
-  if (Number.isFinite(spec.target)) {
+  if (Number.isFinite(target)) {
     if (spec.direction === 'up') {
-      if (value >= spec.target) return 'ok';
-      if (value >= spec.target * 0.95) return 'warn';
+      if (value >= target) return 'ok';
+      if (value >= target * 0.95) return 'warn';
       return 'bad';
     }
 
-    if (value <= spec.target) return 'ok';
-    if (value <= spec.target * 1.05) return 'warn';
+    if (value <= target) return 'ok';
+    if (value <= target * 1.05) return 'warn';
     return 'bad';
   }
 
@@ -42,6 +38,18 @@ function getPointStatus(value, spec) {
 function trendText(delta) {
   if (!Number.isFinite(delta) || Math.abs(delta) < 0.0001) return 'Estável';
   return delta > 0 ? 'Em alta' : 'Em queda';
+}
+
+function getTargetValue(spec) {
+  const lsl = Number(spec?.lsl);
+  const usl = Number(spec?.usl);
+  const setpoint = Number(spec?.setpoint);
+  const target = Number(spec?.target);
+
+  if (Number.isFinite(setpoint)) return setpoint;
+  if (Number.isFinite(lsl) && Number.isFinite(usl)) return (lsl + usl) / 2;
+  if (Number.isFinite(target)) return target;
+  return null;
 }
 
 export default function TrendChart({
@@ -61,11 +69,14 @@ export default function TrendChart({
 
     if (!valid.length) return null;
 
+    const targetValue = getTargetValue(spec);
+    const lsl = Number(spec?.lsl);
+    const usl = Number(spec?.usl);
+
     const values = valid.map((item) => item.value);
-    if (Number.isFinite(spec?.target)) values.push(Number(spec.target));
-    if (Number.isFinite(spec?.lsl)) values.push(Number(spec.lsl));
-    if (Number.isFinite(spec?.usl)) values.push(Number(spec.usl));
-    if (Number.isFinite(spec?.setpoint)) values.push(Number(spec.setpoint));
+    if (Number.isFinite(targetValue)) values.push(targetValue);
+    if (Number.isFinite(lsl)) values.push(lsl);
+    if (Number.isFinite(usl)) values.push(usl);
 
     let min = Math.min(...values);
     let max = Math.max(...values);
@@ -75,14 +86,14 @@ export default function TrendChart({
       min -= padding;
       max += padding;
     } else {
-      const padding = Math.max((max - min) * 0.14, 0.2);
+      const padding = Math.max((max - min) * 0.16, 0.2);
       min -= padding;
       max += padding;
     }
 
-    const width = 900;
-    const height = 400;
-    const padding = { top: 26, right: 24, bottom: 62, left: 58 };
+    const width = 920;
+    const height = 420;
+    const padding = { top: 28, right: 26, bottom: 72, left: 58 };
     const innerWidth = width - padding.left - padding.right;
     const innerHeight = height - padding.top - padding.bottom;
 
@@ -91,16 +102,27 @@ export default function TrendChart({
       return padding.top + innerHeight - ratio * innerHeight;
     };
 
-    const xFor = (index) => {
-      if (valid.length === 1) return padding.left + innerWidth / 2;
-      return padding.left + (index / (valid.length - 1)) * innerWidth;
-    };
+    const slotWidth = innerWidth / valid.length;
+    const barWidth = Math.max(Math.min(slotWidth * 0.52, 52), 18);
 
-    const points = valid.map((item, index) => ({
-      ...item,
-      x: xFor(index),
-      y: yFor(item.value),
-      status: getPointStatus(item.value, spec),
+    const bars = valid.map((item, index) => {
+      const centerX = padding.left + slotWidth * index + slotWidth / 2;
+      const topY = yFor(item.value);
+      const baseY = padding.top + innerHeight;
+      return {
+        ...item,
+        centerX,
+        x: centerX - barWidth / 2,
+        y: topY,
+        width: barWidth,
+        height: Math.max(baseY - topY, 2),
+        status: getPointStatus(item.value, spec),
+      };
+    });
+
+    const linePoints = bars.map((bar) => ({
+      x: bar.centerX,
+      y: Number.isFinite(targetValue) ? yFor(targetValue) : bar.y,
     }));
 
     const ticks = Array.from({ length: 6 }, (_, index) => {
@@ -120,12 +142,12 @@ export default function TrendChart({
     const range = peak - trough;
     const delta = previous ? latest.value - previous.value : 0;
 
-    const statusCounts = points.reduce((acc, point) => {
-      acc[point.status] = (acc[point.status] || 0) + 1;
+    const statusCounts = bars.reduce((acc, bar) => {
+      acc[bar.status] = (acc[bar.status] || 0) + 1;
       return acc;
     }, {});
 
-    const compliance = points.length ? Math.round(((statusCounts.ok || 0) / points.length) * 100) : 0;
+    const compliance = bars.length ? Math.round(((statusCounts.ok || 0) / bars.length) * 100) : 0;
 
     return {
       width,
@@ -134,13 +156,9 @@ export default function TrendChart({
       innerWidth,
       innerHeight,
       ticks,
-      points,
-      areaPath: buildAreaPath(points, padding.top + innerHeight),
-      linePath: buildPath(points),
-      upperLineY: Number.isFinite(spec?.usl) ? yFor(spec.usl) : null,
-      lowerLineY: Number.isFinite(spec?.lsl) ? yFor(spec.lsl) : null,
-      targetY: Number.isFinite(spec?.target) ? yFor(spec.target) : null,
-      setpointY: Number.isFinite(spec?.setpoint) ? yFor(spec.setpoint) : null,
+      bars,
+      linePoints,
+      linePath: Number.isFinite(targetValue) ? buildPath(linePoints) : '',
       latest,
       previous,
       average,
@@ -153,6 +171,13 @@ export default function TrendChart({
       lastLabel: latest?.label,
       sampleCount: valid.reduce((acc, item) => acc + item.count, 0),
       pointCount: valid.length,
+      targetValue,
+      lsl,
+      usl,
+      lowerLineY: Number.isFinite(lsl) ? yFor(lsl) : null,
+      upperLineY: Number.isFinite(usl) ? yFor(usl) : null,
+      targetY: Number.isFinite(targetValue) ? yFor(targetValue) : null,
+      baseY: padding.top + innerHeight,
     };
   }, [data, spec]);
 
@@ -167,9 +192,9 @@ export default function TrendChart({
     innerWidth,
     innerHeight,
     ticks,
-    points,
-    areaPath,
+    bars,
     linePath,
+    linePoints,
   } = chart;
 
   return (
@@ -177,7 +202,7 @@ export default function TrendChart({
       <div className="proChartTopbar">
         <div>
           <div className="proChartEyebrow">Painel analítico</div>
-          <div className="proChartTitle">Tendência consolidada</div>
+          <div className="proChartTitle">Resultado real x meta</div>
         </div>
         <div className="proChartStatusRow">
           <span className="proChartPill is-blue">{chart.pointCount} períodos</span>
@@ -188,9 +213,18 @@ export default function TrendChart({
 
       <div className="proChartStats">
         <div className="proStatCard highlight">
-          <span className="proStatLabel">Último valor</span>
+          <span className="proStatLabel">Último resultado</span>
           <strong>{formatNumber(chart.latest.value)} {unit}</strong>
           <small>{chart.lastLabel}</small>
+        </div>
+        <div className="proStatCard">
+          <span className="proStatLabel">Meta de referência</span>
+          <strong>{Number.isFinite(chart.targetValue) ? `${formatNumber(chart.targetValue)} ${unit}` : '—'}</strong>
+          <small>
+            {Number.isFinite(chart.lowerLineY) && Number.isFinite(chart.upperLineY)
+              ? `Faixa ${formatNumber(chart.lsl)} a ${formatNumber(chart.usl)} ${unit}`
+              : 'Linha de meta aplicada ao gráfico'}
+          </small>
         </div>
         <div className="proStatCard">
           <span className="proStatLabel">Média consolidada</span>
@@ -202,29 +236,18 @@ export default function TrendChart({
           <strong>{formatNumber(chart.range)} {unit}</strong>
           <small>Min {formatNumber(chart.trough)} · Max {formatNumber(chart.peak)}</small>
         </div>
-        <div className="proStatCard">
-          <span className="proStatLabel">Referência operacional</span>
-          <strong>
-            {Number.isFinite(spec?.lsl) && Number.isFinite(spec?.usl)
-              ? `${formatNumber(spec.lsl)} a ${formatNumber(spec.usl)}`
-              : Number.isFinite(spec?.target)
-                ? `${spec.direction === 'down' ? '≤' : '≥'} ${formatNumber(spec.target)}`
-                : '—'} {unit}
-          </strong>
-          <small>{chart.firstLabel} → {chart.lastLabel}</small>
-        </div>
       </div>
 
       <div className="proChartShell">
-        <svg viewBox={`0 0 ${width} ${height}`} className="proChartSvg" role="img" aria-label="Gráfico de tendência operacional">
+        <svg viewBox={`0 0 ${width} ${height}`} className="proChartSvg" role="img" aria-label="Gráfico comparativo entre resultado e meta">
           <defs>
-            <linearGradient id="proChartAreaFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(122,162,255,0.40)" />
-              <stop offset="100%" stopColor="rgba(122,162,255,0.03)" />
+            <linearGradient id="proChartBarFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#35d3ff" />
+              <stop offset="100%" stopColor="#19c7b5" />
             </linearGradient>
             <linearGradient id="proChartBandFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(46,229,157,0.14)" />
-              <stop offset="100%" stopColor="rgba(46,229,157,0.05)" />
+              <stop offset="0%" stopColor="rgba(109,190,69,0.16)" />
+              <stop offset="100%" stopColor="rgba(109,190,69,0.05)" />
             </linearGradient>
           </defs>
 
@@ -239,98 +262,84 @@ export default function TrendChart({
             </g>
           ))}
 
-          {chart.upperLineY !== null && chart.lowerLineY !== null && (
+          {Number.isFinite(chart.lowerLineY) && Number.isFinite(chart.upperLineY) ? (
             <rect
               x={padding.left}
               y={Math.min(chart.upperLineY, chart.lowerLineY)}
               width={innerWidth}
               height={Math.abs(chart.lowerLineY - chart.upperLineY)}
-              rx="16"
               className="proChartBand"
+              rx="18"
             />
-          )}
+          ) : null}
 
-          {chart.upperLineY !== null && (
-            <g>
-              <line x1={padding.left} x2={padding.left + innerWidth} y1={chart.upperLineY} y2={chart.upperLineY} className="proChartLimit" />
-              <text x={padding.left + innerWidth - 6} y={chart.upperLineY - 8} textAnchor="end" className="proChartLimitText">
-                USL {formatNumber(spec.usl)} {unit}
-              </text>
-            </g>
-          )}
-
-          {chart.lowerLineY !== null && (
-            <g>
+          {Number.isFinite(chart.lowerLineY) ? (
+            <>
               <line x1={padding.left} x2={padding.left + innerWidth} y1={chart.lowerLineY} y2={chart.lowerLineY} className="proChartLimit" />
-              <text x={padding.left + innerWidth - 6} y={chart.lowerLineY - 8} textAnchor="end" className="proChartLimitText">
-                LSL {formatNumber(spec.lsl)} {unit}
+              <text x={padding.left + 10} y={chart.lowerLineY - 8} className="proChartLimitText">LSL {formatNumber(chart.lsl)}</text>
+            </>
+          ) : null}
+
+          {Number.isFinite(chart.upperLineY) ? (
+            <>
+              <line x1={padding.left} x2={padding.left + innerWidth} y1={chart.upperLineY} y2={chart.upperLineY} className="proChartLimit" />
+              <text x={padding.left + 10} y={chart.upperLineY - 8} className="proChartLimitText">USL {formatNumber(chart.usl)}</text>
+            </>
+          ) : null}
+
+          {bars.map((bar, index) => (
+            <g key={`${bar.label}-${index}`}>
+              <rect
+                x={bar.x}
+                y={bar.y}
+                width={bar.width}
+                height={bar.height}
+                rx="10"
+                fill="url(#proChartBarFill)"
+                opacity={bar.status === 'bad' ? 0.78 : 1}
+              />
+              <text x={bar.centerX} y={chart.baseY + 24} textAnchor="middle" className="proChartAxisText">
+                {bar.label}
               </text>
             </g>
-          )}
+          ))}
 
-          {chart.targetY !== null && (
-            <g>
-              <line x1={padding.left} x2={padding.left + innerWidth} y1={chart.targetY} y2={chart.targetY} className="proChartTarget" />
-              <text x={padding.left + 6} y={chart.targetY - 8} textAnchor="start" className="proChartTargetText">
-                Meta {formatNumber(spec.target)} {unit}
-              </text>
-            </g>
-          )}
+          {linePath ? <path d={linePath} className="proChartTargetLine" /> : null}
 
-          {chart.setpointY !== null && (
-            <g>
-              <line x1={padding.left} x2={padding.left + innerWidth} y1={chart.setpointY} y2={chart.setpointY} className="proChartSetpoint" />
-              <text x={padding.left + 6} y={chart.setpointY - 8} textAnchor="start" className="proChartSetpointText">
-                Setpoint {formatNumber(spec.setpoint)} {unit}
-              </text>
-            </g>
-          )}
+          {linePoints.map((point, index) => (
+            <circle key={`meta-${index}`} cx={point.x} cy={point.y} r="4.5" className="proChartTargetDot" />
+          ))}
 
-          {points.map((point, index) => (
-            <line
-              key={`v-${point.label}`}
-              x1={point.x}
-              x2={point.x}
-              y1={padding.top}
-              y2={padding.top + innerHeight}
-              className={index === points.length - 1 ? 'proChartGuide is-last' : 'proChartGuide'}
+          {bars.map((bar, index) => (
+            <circle
+              key={`value-${index}`}
+              cx={bar.centerX}
+              cy={bar.y}
+              r="5.5"
+              className={`proChartPoint ${bar.status}`}
             />
           ))}
 
-          <path d={areaPath} className="proChartArea" />
-          <path d={linePath} className="proChartLine" />
-
-          {points.map((point, index) => {
-            const showLabel = points.length <= 8 || index === 0 || index === points.length - 1 || index % 2 === 0;
-            return (
-              <g key={point.label}>
-                <circle cx={point.x} cy={point.y} r={index === points.length - 1 ? '7' : '5'} className={`proChartPoint ${point.status}`} />
-                {showLabel && (
-                  <text x={point.x} y={height - 18} textAnchor="middle" className="proChartAxisText">
-                    {point.label}
-                  </text>
-                )}
-                {index === points.length - 1 && (
-                  <g>
-                    <rect x={point.x - 38} y={point.y - 42} width="76" height="24" rx="12" className="proChartCallout" />
-                    <text x={point.x} y={point.y - 26} textAnchor="middle" className="proChartCalloutText">
-                      {formatNumber(point.value)} {unit}
-                    </text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
+          {bars.length ? (
+            <g transform={`translate(${bars[bars.length - 1].centerX - 54}, ${bars[bars.length - 1].y - 58})`}>
+              <rect width="108" height="42" rx="12" className="proChartCallout" />
+              <text x="54" y="18" textAnchor="middle" className="proChartCalloutText">Atual</text>
+              <text x="54" y="31" textAnchor="middle" className="proChartCalloutText">
+                {formatNumber(bars[bars.length - 1].value)} {unit}
+              </text>
+            </g>
+          ) : null}
         </svg>
       </div>
 
       <div className="proChartLegend">
-        <span><i className="legendSwatch legendLine" />Média consolidada</span>
-        {(chart.upperLineY !== null || chart.lowerLineY !== null) && <span><i className="legendSwatch legendBand" />Faixa operacional</span>}
-        {chart.setpointY !== null && <span><i className="legendSwatch legendSetpoint" />Setpoint</span>}
-        {chart.targetY !== null && <span><i className="legendSwatch legendTarget" />Meta</span>}
-        <span><i className="legendDot ok" />Dentro da especificação</span>
-        <span><i className="legendDot bad" />Fora da especificação</span>
+        <span><i className="legendSwatch legendBar" /> Resultado realizado</span>
+        <span><i className="legendSwatch legendMeta" /> Meta / referência</span>
+        {Number.isFinite(chart.lowerLineY) && Number.isFinite(chart.upperLineY) ? (
+          <span><i className="legendSwatch legendBand" /> Faixa de especificação</span>
+        ) : null}
+        <span><i className="legendDot ok" /> Dentro da especificação</span>
+        <span><i className="legendDot bad" /> Fora da especificação</span>
       </div>
     </div>
   );

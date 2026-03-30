@@ -292,7 +292,9 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .proChartBand{ fill: url(#proChartBandFill); }
 .proChartArea{ fill: url(#proChartAreaFill); }
 .proChartLine{ fill:none; stroke: #8ab4ff; stroke-width: 3.5; stroke-linejoin:round; stroke-linecap:round; }
-.proChartLimit{ stroke: rgba(46,229,157,.55); stroke-width: 1.5; stroke-dasharray: 6 8; }
+.proChartTargetLine{ fill:none; stroke: #ff9f5a; stroke-width: 3.5; stroke-linejoin:round; stroke-linecap:round; }
+.proChartTargetDot{ fill: #ffd6b8; stroke: #ff9f5a; stroke-width: 2; }
+.proChartLimit{ stroke: rgba(109,190,69,.72); stroke-width: 1.5; stroke-dasharray: 6 8; }
 .proChartLimitText{ fill: #aef0d0; font-size: 11px; font-weight: 800; }
 .proChartTarget{ stroke: rgba(255,209,102,.95); stroke-width:2; stroke-dasharray: 8 8; }
 .proChartTargetText{ fill: #ffe6a6; font-size: 11px; font-weight: 800; }
@@ -327,7 +329,9 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
   border:1px solid transparent;
 }
 .legendLine{ background: linear-gradient(90deg, #8ab4ff, #cfe0ff); }
-.legendBand{ background: rgba(46,229,157,.16); border-color: rgba(46,229,157,.25); }
+.legendBar{ background: linear-gradient(90deg, #35d3ff, #19c7b5); border-color: rgba(53,211,255,.28); }
+.legendMeta{ background: rgba(255,159,90,.28); border-color: rgba(255,159,90,.42); }
+.legendBand{ background: rgba(109,190,69,.16); border-color: rgba(109,190,69,.25); }
 .legendTarget{ background: rgba(255,209,102,.28); border-color: rgba(255,209,102,.35); }
 .legendSetpoint{ background: rgba(122,162,255,.25); border-color: rgba(122,162,255,.32); }
 .legendDot{

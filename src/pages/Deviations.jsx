@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { formatNumber } from '../utils';
 import { appendAudit, createAuditEvent, getKpiLabel } from '../store';
 import { buildRoleNotifications } from '../notifications';
@@ -81,7 +81,14 @@ function csvCell(value) {
   return typeof value === 'string' ? `"${String(value).replaceAll('"', '""')}"` : value;
 }
 
-function addAttachment(deviation, ctx, patchDeviation) {
+function formatBytes(bytes) {
+  if (!bytes) return '0 KB';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function addLinkAttachment(deviation, patchDeviation) {
   const name = window.prompt('Nome do anexo ou evidência:');
   if (!name) return;
   const url = window.prompt('URL do arquivo/evidência (opcional):', '') || '';
@@ -89,13 +96,13 @@ function addAttachment(deviation, ctx, patchDeviation) {
     deviation.id,
     {
       attachments: [
-        { id: crypto.randomUUID(), name: name.trim(), url: url.trim(), createdAt: new Date().toISOString() },
+        { id: crypto.randomUUID(), name: name.trim(), url: url.trim(), kind: 'LINK', createdAt: new Date().toISOString() },
         ...(Array.isArray(deviation.attachments) ? deviation.attachments : []),
       ],
     },
     'DEVIATION_ATTACHMENT_ADDED',
     `Anexo adicionado ao desvio ${getKpiLabel(deviation.kpiKey)}.`,
-    `Anexo registrado: ${name.trim()}`
+    `Evidência registrada: ${name.trim()}`
   );
 }
 
@@ -115,6 +122,8 @@ export default function Deviations({ ctx }) {
   const [kpiFilter, setKpiFilter] = useState('');
   const [shiftFilter, setShiftFilter] = useState('');
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef(null);
+  const [uploadTargetId, setUploadTargetId] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
   const canManage = ctx.can('MANAGE_DEVIATIONS');
@@ -237,6 +246,110 @@ export default function Deviations({ ctx }) {
       };
     });
   }, [deviations, today]);
+
+  const responsibleSla = useMemo(() => {
+    const parseDate = (value) => value ? new Date(`${value}T00:00:00`) : null;
+    const now = new Date();
+    const grouped = {};
+
+    deviations.forEach((item) => {
+      const ownerName = nameById(masters.leaders, item.ownerId);
+      const key = ownerName && ownerName !== '—' ? ownerName : 'Sem responsável';
+      if (!grouped[key]) grouped[key] = { ownerName: key, total: 0, open: 0, overdue: 0, ages: [] };
+      grouped[key].total += 1;
+      if (normalizeStatus(item.status) !== 'CONCLUIDO') {
+        grouped[key].open += 1;
+        if (item.dueDate && item.dueDate < today) grouped[key].overdue += 1;
+        const start = parseDate(item.date);
+        if (start) grouped[key].ages.push(Math.max(0, Math.round((now - start) / 86400000)));
+      }
+    });
+
+    return Object.values(grouped)
+      .map((item) => ({
+        ownerName: item.ownerName,
+        total: item.total,
+        open: item.open,
+        overdue: item.overdue,
+        avgAge: item.ages.length ? item.ages.reduce((a, b) => a + b, 0) / item.ages.length : 0,
+      }))
+      .sort((a, b) => b.overdue - a.overdue || b.open - a.open || b.total - a.total)
+      .slice(0, 8);
+  }, [deviations, masters.leaders, today]);
+
+  function openUploadForDeviation(deviationId) {
+    setUploadTargetId(deviationId);
+    fileInputRef.current?.click();
+  }
+
+  function handleFileUpload(event) {
+    const file = event.target.files?.[0];
+    const targetId = uploadTargetId;
+    event.target.value = '';
+    if (!file || !targetId) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Para uso local, o arquivo deve ter até 2 MB.');
+      return;
+    }
+
+    const deviation = deviations.find((item) => item.id === targetId);
+    if (!deviation) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      patchDeviation(
+        targetId,
+        {
+          attachments: [
+            {
+              id: crypto.randomUUID(),
+              name: file.name,
+              kind: 'UPLOAD',
+              mimeType: file.type || 'application/octet-stream',
+              size: file.size,
+              dataUrl,
+              createdAt: new Date().toISOString(),
+            },
+            ...(Array.isArray(deviation.attachments) ? deviation.attachments : []),
+          ],
+        },
+        'DEVIATION_ATTACHMENT_UPLOADED',
+        `Arquivo anexado ao desvio ${getKpiLabel(deviation.kpiKey)}.`,
+        `Arquivo anexado: ${file.name}`
+      );
+      setUploadTargetId('');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeAttachment(deviation, attachmentId) {
+    patchDeviation(
+      deviation.id,
+      {
+        attachments: (deviation.attachments || []).filter((item) => item.id !== attachmentId),
+      },
+      'DEVIATION_ATTACHMENT_REMOVED',
+      `Anexo removido do desvio ${getKpiLabel(deviation.kpiKey)}.`,
+      'Anexo removido.'
+    );
+  }
+
+  function exportResponsibleSla() {
+    const rows = [];
+    rows.push(['responsavel','total','abertos','atrasados','idade_media_dias'].join(','));
+    responsibleSla.forEach((item) => {
+      rows.push([
+        item.ownerName,
+        item.total,
+        item.open,
+        item.overdue,
+        formatNumber(item.avgAge),
+      ].map(csvCell).join(','));
+    });
+    if (rows.length === 1) rows.push(['Sem dados','','','',''].map(csvCell).join(','));
+    downloadCsv(`sla_por_responsavel_adm_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  }
 
   function exportQualityQueue() {
     const rows = [];
@@ -416,10 +529,13 @@ export default function Deviations({ ctx }) {
         {ctx.can('EXPORT_DATA') ? (
           <div className="btnRow" style={{ marginTop: 0 }}>
             <button className="primary" onClick={exportSlaReport}>Exportar SLA</button>
+            <button onClick={exportResponsibleSla}>SLA por responsável</button>
             {ctx.can('VALIDATE_DEVIATIONS') ? <button onClick={exportQualityQueue}>Fila da Qualidade</button> : null}
           </div>
         ) : null}
       </div>
+
+      <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
 
       <div className="grid" style={{ marginBottom: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <SummaryCard title="Abertos" value={summary.ABERTO} tone="bad" />
@@ -429,6 +545,8 @@ export default function Deviations({ ctx }) {
         <SummaryCard title="Concluídos" value={summary.CONCLUIDO} tone="ok" />
         <SummaryCard title="Atrasados" value={summary.overdue} tone={summary.overdue > 0 ? 'bad' : 'ok'} />
       </div>
+
+      <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
 
       <div className="grid" style={{ marginBottom: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <SummaryCard title="SLA dentro do prazo" value={`${formatNumber(slaSummary.onTimeRate)}%`} tone={slaSummary.onTimeRate >= 90 ? 'ok' : slaSummary.onTimeRate >= 75 ? 'warn' : 'bad'} hint={`${slaSummary.onTime} de ${slaSummary.measured} desvios com prazo`} />
@@ -523,6 +641,36 @@ export default function Deviations({ ctx }) {
           </table>
         </div>
       ) : null}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="cardTitle">SLA por responsável</div>
+        <div className="small" style={{ marginBottom: 10 }}>Concentração dos desvios abertos, atrasos e idade média por responsável.</div>
+        <table className="table">
+          <thead>
+            <tr>
+              <th className="th">Responsável</th>
+              <th className="th">Total</th>
+              <th className="th">Abertos</th>
+              <th className="th">Atrasados</th>
+              <th className="th">Idade média</th>
+            </tr>
+          </thead>
+          <tbody>
+            {responsibleSla.map((item) => (
+              <tr key={item.ownerName} className="tr">
+                <td className="td"><b>{item.ownerName}</b></td>
+                <td className="td">{item.total}</td>
+                <td className="td">{item.open}</td>
+                <td className="td">{item.overdue}</td>
+                <td className="td">{formatNumber(item.avgAge)} d</td>
+              </tr>
+            ))}
+            {!responsibleSla.length && (
+              <tr><td className="td" colSpan={5} style={{ color: 'var(--muted)' }}>Sem dados por responsável.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="cardTitle">Filtros</div>
@@ -688,6 +836,40 @@ export default function Deviations({ ctx }) {
                       placeholder="Parecer da Qualidade"
                       style={{ marginTop: 8 }}
                     />
+                    <textarea
+                      rows={2}
+                      value={d.notes || ''}
+                      disabled={!editable}
+                      onChange={(e) => updateField(d, 'notes', e.target.value, 'DEVIATION_NOTES_UPDATED', 'Notas complementares atualizadas.')}
+                      placeholder="Notas complementares"
+                      style={{ marginTop: 8 }}
+                    />
+                    <div style={{ marginTop: 10 }}>
+                      <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>Evidências e anexos</div>
+                      <div className="btnRow" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+                        <button disabled={!editable} onClick={() => openUploadForDeviation(d.id)}>Upload local</button>
+                        <button disabled={!editable} onClick={() => addLinkAttachment(d, patchDeviation)}>Link / evidência</button>
+                      </div>
+                      {(d.attachments || []).length ? (
+                        <div className="timelineList">
+                          {d.attachments.map((item) => (
+                            <div key={item.id} className="timelineItem">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                <div>
+                                  <b>{item.name}</b>
+                                  <div className="small" style={{ marginTop: 4 }}>
+                                    {item.kind === 'UPLOAD' ? `Arquivo local • ${formatBytes(item.size)}` : 'Evidência por link'}
+                                  </div>
+                                  {item.url ? <div className="small" style={{ marginTop: 4 }}><a href={item.url} target="_blank" rel="noreferrer">Abrir link</a></div> : null}
+                                  {item.dataUrl ? <div className="small" style={{ marginTop: 4 }}><a href={item.dataUrl} download={item.name}>Baixar arquivo</a></div> : null}
+                                </div>
+                                {editable ? <button onClick={() => removeAttachment(d, item.id)}>Remover</button> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div className="small">Nenhuma evidência anexada.</div>}
+                    </div>
                   </td>
                   <td className="td">
                     <div className="btnRow" style={{ flexWrap: 'wrap' }}>

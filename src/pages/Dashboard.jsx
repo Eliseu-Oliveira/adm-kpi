@@ -598,6 +598,20 @@ export default function Dashboard({ ctx }) {
     };
   }, [filteredDeviations]);
 
+  const monthlyExecutive = useMemo(() => {
+    const approved = monthlyEntries.filter((item) => item.approvalStatus === 'APROVADO').length;
+    const pending = monthlyEntries.filter((item) => item.approvalStatus !== 'APROVADO').length;
+    const openDeviations = monthlyDeviations.filter((item) => item.status !== 'CONCLUIDO').length;
+    const overdue = monthlyDeviations.filter((item) => item.status !== 'CONCLUIDO' && item.dueDate && item.dueDate < new Date().toISOString().slice(0, 10)).length;
+    return {
+      entries: monthlyEntries.length,
+      approved,
+      pending,
+      openDeviations,
+      overdue,
+    };
+  }, [monthlyEntries, monthlyDeviations]);
+
   const exportExecutiveReport = () => {
     const html = buildExecutiveReportHtml({
       periodLabel,
@@ -683,7 +697,10 @@ export default function Dashboard({ ctx }) {
         <div className="cardTitle">
           <span>Filtros de análise</span>
           {ctx.can('EXPORT_DATA') ? (
-            <button className="primary" onClick={exportExecutiveReport}>Exportar relatório executivo</button>
+            <div className="btnRow" style={{ marginTop: 0 }}>
+              <button className="primary" onClick={exportExecutiveReport}>Exportar relatório executivo</button>
+              <button onClick={exportMonthlyConsolidatedReport}>Relatório mensal</button>
+            </div>
           ) : null}
         </div>
         <div className="row">
@@ -748,6 +765,33 @@ export default function Dashboard({ ctx }) {
           </div>
         </div>
       ) : null}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="cardTitle">Painel executivo mensal</div>
+        <div className="small" style={{ marginBottom: 10 }}>Consolidado do mês corrente para acompanhamento gerencial.</div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="small">Apontamentos do mês</div>
+            <div className="h1" style={{ fontSize: 24 }}>{monthlyExecutive.entries}</div>
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="small">Aprovados</div>
+            <div className="h1" style={{ fontSize: 24, color: 'var(--ok)' }}>{monthlyExecutive.approved}</div>
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="small">Pendentes</div>
+            <div className="h1" style={{ fontSize: 24, color: monthlyExecutive.pending > 0 ? 'var(--warn)' : 'var(--text)' }}>{monthlyExecutive.pending}</div>
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="small">Desvios abertos</div>
+            <div className="h1" style={{ fontSize: 24, color: monthlyExecutive.openDeviations > 0 ? 'var(--bad)' : 'var(--text)' }}>{monthlyExecutive.openDeviations}</div>
+          </div>
+          <div className="card" style={{ margin: 0 }}>
+            <div className="small">Desvios atrasados</div>
+            <div className="h1" style={{ fontSize: 24, color: monthlyExecutive.overdue > 0 ? 'var(--bad)' : 'var(--ok)' }}>{monthlyExecutive.overdue}</div>
+          </div>
+        </div>
+      </div>
 
       {ctx.can('VALIDATE_DEVIATIONS') ? (
         <div className="card" style={{ marginBottom: 12 }}>

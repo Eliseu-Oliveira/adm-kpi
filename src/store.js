@@ -1,6 +1,6 @@
 import { isoToday } from './utils';
 
-const LS_KEY = 'sho_kpi_app_v11';
+const LS_KEY = 'sho_kpi_app_v12';
 
 export const KPI_DEFS = {
   OEE: { label: 'OEE' },
@@ -101,7 +101,13 @@ export function loadState() {
         closedBy: deviation.closedBy || null,
         timeline: Array.isArray(deviation.timeline) ? deviation.timeline : [],
         notes: deviation.notes || '',
-        attachments: Array.isArray(deviation.attachments) ? deviation.attachments : [],
+        attachments: Array.isArray(deviation.attachments) ? deviation.attachments.map((item) => ({
+          ...item,
+          kind: item.kind || ('dataUrl' in item ? 'UPLOAD' : 'LINK'),
+          dataUrl: item.dataUrl || '',
+          mimeType: item.mimeType || '',
+          size: item.size || 0,
+        })) : [],
       })),
       audits: parsed.audits || [],
       users: (parsed.users && parsed.users.length ? parsed.users : defaultUsers(parsed.masters?.operators?.[0]?.id || '', parsed.masters?.leaders?.[0]?.id || '')),
