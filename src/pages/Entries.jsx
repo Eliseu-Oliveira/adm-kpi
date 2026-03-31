@@ -684,6 +684,8 @@ function EntryDetailModal({ entry, masters, cfgs, deviations, canEdit, onEdit, o
 
 export default function Entries({ ctx }) {
   const { state, setState, currentUser } = ctx;
+  const notify = ctx.notify || (() => {});
+  const promptAction = ctx.promptAction || (async () => null);
   const { masters } = state;
 
   const operators = masters.operators.filter((o) => o.active);
@@ -815,17 +817,28 @@ export default function Entries({ ctx }) {
     return working;
   }
 
-  function saveEntry() {
+  async function saveEntry() {
     const validationError = validateDraft();
-    if (validationError) return alert(validationError);
+    if (validationError) {
+      notify({ title: 'Validação do apontamento', message: validationError, tone: 'warning' });
+      return;
+    }
 
     const baseEntry = buildEntryFromDraft(draft);
     const actorName = currentUser?.name || nameById(operators, draft.operatorId);
 
     if (editingEntryId) {
-      const reason = window.prompt('Informe o motivo da edição controlada deste apontamento:') || '';
+      const reason = await promptAction({
+        title: 'Edição controlada do apontamento',
+        message: 'Informe o motivo da edição para manter a rastreabilidade do sistema.',
+        label: 'Motivo da edição',
+        placeholder: 'Descreva o motivo da revisão deste apontamento',
+        confirmText: 'Registrar edição',
+        required: true,
+        tone: 'warning',
+      }) || '';
       if (!reason.trim()) {
-        alert('Informe o motivo da edição para manter a rastreabilidade.');
+        notify({ title: 'Motivo obrigatório', message: 'Informe o motivo da edição para manter a rastreabilidade.', tone: 'warning' });
         return;
       }
 
@@ -884,7 +897,7 @@ export default function Entries({ ctx }) {
       });
 
       resetDraft();
-      alert('Apontamento atualizado. A revisão foi registrada e o item voltou para aprovação.');
+      notify({ title: 'Apontamento atualizado', message: 'A revisão foi registrada e o item voltou para aprovação.', tone: 'success' });
       return;
     }
 
@@ -918,7 +931,7 @@ export default function Entries({ ctx }) {
     });
 
     resetDraft();
-    alert('Apontamento salvo. Desvios foram gerados quando necessário.');
+    notify({ title: 'Apontamento salvo', message: 'O registro foi salvo e os desvios necessários foram gerados automaticamente.', tone: 'success' });
   }
 
   function startEditing(entry) {
@@ -951,13 +964,19 @@ export default function Entries({ ctx }) {
   const canApproveEntries = ctx.can('APPROVE_ENTRIES');
   const selectedEntry = useMemo(() => state.entries.find((item) => item.id === selectedEntryId) || null, [state.entries, selectedEntryId]);
 
-  function updateEntryApproval(entryId, approvalStatus) {
+  async function updateEntryApproval(entryId, approvalStatus) {
     if (!canApproveEntries) return;
-    const note = window.prompt(
-      approvalStatus === 'APROVADO' ? 'Comentário da aprovação (opcional):' : 'Informe o motivo da reprovação:'
-    ) || '';
+    const note = await promptAction({
+      title: approvalStatus === 'APROVADO' ? 'Aprovar apontamento' : 'Reprovar apontamento',
+      message: approvalStatus === 'APROVADO' ? 'Registre um comentário opcional para a aprovação.' : 'Informe o motivo da reprovação do apontamento.',
+      label: approvalStatus === 'APROVADO' ? 'Comentário da aprovação' : 'Motivo da reprovação',
+      placeholder: approvalStatus === 'APROVADO' ? 'Comentário opcional' : 'Descreva o motivo da reprovação',
+      confirmText: approvalStatus === 'APROVADO' ? 'Aprovar' : 'Reprovar',
+      required: approvalStatus === 'REPROVADO',
+      tone: approvalStatus === 'APROVADO' ? 'success' : 'error',
+    }) || '';
     if (approvalStatus === 'REPROVADO' && !note.trim()) {
-      alert('Informe o motivo da reprovação.');
+      notify({ title: 'Motivo obrigatório', message: 'Informe o motivo da reprovação.', tone: 'warning' });
       return;
     }
 
@@ -989,6 +1008,11 @@ export default function Entries({ ctx }) {
         details: `${approvalStatus} • ${entry.date} • ${shiftLabel(entry.shift)}`,
       }));
       return next;
+    });
+    notify({
+      title: approvalStatus === 'APROVADO' ? 'Apontamento aprovado' : 'Apontamento reprovado',
+      message: approvalStatus === 'APROVADO' ? 'O apontamento foi aprovado com sucesso.' : 'A reprovação foi registrada no fluxo do apontamento.',
+      tone: approvalStatus === 'APROVADO' ? 'success' : 'warning',
     });
   }
 

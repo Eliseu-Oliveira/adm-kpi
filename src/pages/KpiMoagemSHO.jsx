@@ -128,7 +128,7 @@ function avg(nums) {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
-export default function KpiMoagemSHO() {
+export default function KpiMoagemSHO({ ctx }) {
   const [date, setDate] = useState(isoToday());
   const [shift, setShift] = useState("NOITE");
   const [farelo, setFarelo] = useState("Moído");
@@ -379,7 +379,7 @@ export default function KpiMoagemSHO() {
         <div className="btnRow">
           <button
             className="primary"
-            onClick={() => alert("Próximo passo: salvar no localStorage exatamente como a planilha (1 registro por Data+Turno).")}
+            onClick={() => ctx?.notify?.({ title: "Próximo passo", message: "Salvar no localStorage exatamente como a planilha, com 1 registro por Data + Turno.", tone: "info" })}
           >
             Salvar (placeholder)
           </button>

@@ -655,3 +655,109 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .timelineList{ display:grid; gap:10px; }
 .timelineItem{ border:1px solid var(--line); border-radius:14px; padding:12px; background:#fbfdff; }
 .timelineDate{ font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--muted); margin-bottom:4px; font-weight:800; }
+
+.appTopbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:12px 14px;
+  margin-bottom:12px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(233,240,251,.92));
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+.topbarTitle{ font-size:14px; font-weight:900; color:var(--accent); }
+.topbarActions{ display:flex; align-items:center; gap:10px; }
+.notificationBellWrap{ position:relative; }
+.notificationBell{
+  position:relative;
+  width:46px; height:46px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:#fff;
+  font-size:18px;
+}
+.notificationBadge{
+  position:absolute;
+  top:-6px; right:-6px;
+  min-width:20px; height:20px;
+  padding:0 6px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:999px;
+  background:var(--bad); color:#fff; font-size:11px; font-weight:900;
+}
+.notificationDropdown{
+  position:absolute;
+  right:0;
+  top:56px;
+  width:min(420px, 90vw);
+  max-height:520px;
+  overflow:hidden;
+  z-index:60;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:#fff;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, .16);
+}
+.notificationDropdownHeader{
+  display:flex; justify-content:space-between; gap:10px; align-items:flex-start;
+  padding:14px; border-bottom:1px solid var(--line);
+}
+.notificationList{ max-height:420px; overflow:auto; padding:12px; display:grid; gap:10px; }
+.notificationItem{ border:1px solid var(--line); border-radius:14px; padding:12px; background:#fff; }
+.notificationItem.is-read{ opacity:.78; }
+.notificationItem.success{ border-color: rgba(109,190,69,.28); background: rgba(109,190,69,.06); }
+.notificationItem.error{ border-color: rgba(209,67,67,.25); background: rgba(209,67,67,.06); }
+.notificationItem.warning{ border-color: rgba(242,169,0,.26); background: rgba(242,169,0,.08); }
+.notificationItem.info{ border-color: rgba(0,58,143,.18); background: rgba(0,58,143,.05); }
+.notificationItem.quality{ border-color: rgba(124,58,237,.22); background: rgba(124,58,237,.06); }
+.notificationItemTop{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.notificationText{ margin-top:6px; line-height:1.45; color:var(--text); }
+.toastViewport{
+  position:fixed;
+  top:18px;
+  right:18px;
+  z-index:120;
+  display:grid;
+  gap:10px;
+  width:min(360px, calc(100vw - 24px));
+}
+.toastCard{
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:12px 14px;
+  background:#fff;
+  box-shadow:0 18px 42px rgba(15,23,42,.14);
+}
+.toastCard.success{ border-color: rgba(109,190,69,.28); box-shadow:0 18px 42px rgba(109,190,69,.12); }
+.toastCard.error{ border-color: rgba(209,67,67,.25); box-shadow:0 18px 42px rgba(209,67,67,.12); }
+.toastCard.warning{ border-color: rgba(242,169,0,.28); box-shadow:0 18px 42px rgba(242,169,0,.12); }
+.toastCard.info{ border-color: rgba(0,58,143,.16); box-shadow:0 18px 42px rgba(0,58,143,.12); }
+.toastCard.quality{ border-color: rgba(124,58,237,.22); box-shadow:0 18px 42px rgba(124,58,237,.12); }
+.toastHeader{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.toastBody{ margin-top:4px; font-size:13px; line-height:1.45; color:var(--text); }
+.iconButton{ width:28px; height:28px; padding:0; border-radius:10px; }
+.modalBackdrop{
+  position:fixed; inset:0; z-index:140;
+  background:rgba(15,23,42,.36);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.modalCard{
+  width:min(560px, 100%);
+  border:1px solid var(--line);
+  border-radius:20px;
+  background:#fff;
+  padding:18px;
+  box-shadow:0 26px 60px rgba(15,23,42,.22);
+}
+.modalEyebrow{ color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:900; letter-spacing:.8px; }
+.modalTitle{ font-size:20px; font-weight:900; color:var(--accent); margin-top:4px; }
+.modalMessage{ margin-top:10px; color:var(--text); line-height:1.55; }
+.modalHelper{ margin-top:10px; }
+@media (max-width: 920px){
+  .layout{ flex-direction:column; }
+  .sidebar{ width:auto; }
+}

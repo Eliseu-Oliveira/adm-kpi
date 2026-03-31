@@ -21,9 +21,13 @@ export default function Users({ ctx }) {
   const [draft, setDraft] = useState(blankUser());
 
   function addUser() {
-    if (!draft.name.trim() || !draft.email.trim()) return alert('Informe nome e e-mail do usuário.');
+    if (!draft.name.trim() || !draft.email.trim()) {
+      ctx.notify?.({ title: 'Dados obrigatórios', message: 'Informe nome e e-mail do usuário.', tone: 'warning' });
+      return;
+    }
     if ((state.users || []).some((user) => user.email.toLowerCase() === draft.email.trim().toLowerCase())) {
-      return alert('Já existe um usuário com este e-mail.');
+      ctx.notify?.({ title: 'E-mail duplicado', message: 'Já existe um usuário com este e-mail.', tone: 'error' });
+      return;
     }
 
     setState((prev) => {
@@ -33,6 +37,7 @@ export default function Users({ ctx }) {
       return next;
     });
     setDraft(blankUser());
+    ctx.notify?.({ title: 'Usuário criado', message: 'O usuário foi cadastrado com sucesso.', tone: 'success' });
   }
 
   function updateUser(userId, patch, action = 'USER_UPDATED') {

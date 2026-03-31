@@ -88,10 +88,26 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function addLinkAttachment(deviation, patchDeviation) {
-  const name = window.prompt('Nome do anexo ou evidência:');
-  if (!name) return;
-  const url = window.prompt('URL do arquivo/evidência (opcional):', '') || '';
+async function addLinkAttachment(deviation, patchDeviation, promptAction, notify) {
+  const name = await promptAction({
+    title: 'Adicionar evidência por link',
+    message: 'Informe o nome do anexo ou evidência.',
+    label: 'Nome do anexo',
+    placeholder: 'Ex.: Relatório laboratorial',
+    confirmText: 'Continuar',
+    required: true,
+    tone: 'info',
+  });
+  if (!name || !name.trim()) return;
+  const url = (await promptAction({
+    title: 'Adicionar URL da evidência',
+    message: 'Informe a URL do arquivo/evidência. Este campo é opcional.',
+    label: 'URL da evidência',
+    placeholder: 'https://...',
+    confirmText: 'Adicionar evidência',
+    required: false,
+    tone: 'info',
+  })) || '';
   patchDeviation(
     deviation.id,
     {
@@ -104,6 +120,7 @@ function addLinkAttachment(deviation, patchDeviation) {
     `Anexo adicionado ao desvio ${getKpiLabel(deviation.kpiKey)}.`,
     `Evidência registrada: ${name.trim()}`
   );
+  notify?.({ title: 'Evidência adicionada', message: `A evidência ${name.trim()} foi registrada no desvio.`, tone: 'success' });
 }
 
 function canEditWorkflow(status, ctx) {
@@ -116,6 +133,8 @@ function canEditWorkflow(status, ctx) {
 
 export default function Deviations({ ctx }) {
   const { state, setState, currentUser } = ctx;
+  const notify = ctx.notify || (() => {});
+  const promptAction = ctx.promptAction || (async () => null);
   const { masters } = state;
 
   const [statusFilter, setStatusFilter] = useState('ABERTO');
@@ -288,7 +307,7 @@ export default function Deviations({ ctx }) {
     event.target.value = '';
     if (!file || !targetId) return;
     if (file.size > 2 * 1024 * 1024) {
-      alert('Para uso local, o arquivo deve ter até 2 MB.');
+      notify({ title: 'Upload não permitido', message: 'Para uso local, o arquivo deve ter até 2 MB.', tone: 'warning' });
       return;
     }
 
@@ -319,6 +338,7 @@ export default function Deviations({ ctx }) {
         `Arquivo anexado: ${file.name}`
       );
       setUploadTargetId('');
+      notify({ title: 'Arquivo anexado', message: `O arquivo ${file.name} foi adicionado ao desvio.`, tone: 'success' });
     };
     reader.readAsDataURL(file);
   }
@@ -437,7 +457,7 @@ export default function Deviations({ ctx }) {
     );
   }
 
-  function changeStatus(deviation, nextStatus) {
+  async function changeStatus(deviation, nextStatus) {
     const currentStatus = normalizeStatus(deviation.status);
     const next = normalizeStatus(nextStatus);
 
@@ -446,29 +466,37 @@ export default function Deviations({ ctx }) {
     if (next === 'EM_ANALISE' && !canManage) return;
     if (next === 'CONTIDO' && !canManage) return;
     if ((next === 'VALIDADO_QUALIDADE' || next === 'CONCLUIDO') && !canValidate) {
-      alert('A validação final do desvio exige perfil de Qualidade, Gestão Industrial ou Administrador.');
+      notify({ title: 'Permissão insuficiente', message: 'A validação final do desvio exige perfil de Qualidade, Gestão Industrial ou Administrador.', tone: 'error' });
       return;
     }
 
     if ((next === 'EM_ANALISE' || next === 'CONTIDO' || next === 'VALIDADO_QUALIDADE' || next === 'CONCLUIDO') && !(deviation.ownerId || '').trim()) {
-      alert(`Defina o responsável do desvio ${getKpiLabel(deviation.kpiKey)} antes de avançar o fluxo.`);
+      notify({ title: 'Responsável obrigatório', message: `Defina o responsável do desvio ${getKpiLabel(deviation.kpiKey)} antes de avançar o fluxo.`, tone: 'warning' });
       return;
     }
 
     if ((next === 'CONTIDO' || next === 'VALIDADO_QUALIDADE' || next === 'CONCLUIDO') && !(deviation.action || '').trim()) {
-      alert(`Registre a ação imediata/corretiva do desvio ${getKpiLabel(deviation.kpiKey)} antes de avançar o fluxo.`);
+      notify({ title: 'Ação obrigatória', message: `Registre a ação imediata/corretiva do desvio ${getKpiLabel(deviation.kpiKey)} antes de avançar o fluxo.`, tone: 'warning' });
       return;
     }
 
     if ((next === 'VALIDADO_QUALIDADE' || next === 'CONCLUIDO') && !(deviation.rootCause || '').trim()) {
-      alert(`Informe a causa raiz do desvio ${getKpiLabel(deviation.kpiKey)} antes da validação da Qualidade.`);
+      notify({ title: 'Causa raiz obrigatória', message: `Informe a causa raiz do desvio ${getKpiLabel(deviation.kpiKey)} antes da validação da Qualidade.`, tone: 'warning' });
       return;
     }
 
     if (next === 'CONCLUIDO') {
-      const note = window.prompt('Informe a validação final da Qualidade para concluir o desvio:') || '';
+      const note = await promptAction({
+        title: 'Concluir desvio',
+        message: 'Informe a validação final da Qualidade para concluir o desvio.',
+        label: 'Validação final da Qualidade',
+        placeholder: 'Descreva a validação final',
+        confirmText: 'Concluir desvio',
+        required: true,
+        tone: 'quality',
+      }) || '';
       if (!note.trim()) {
-        alert('A conclusão exige registro da validação final da Qualidade.');
+        notify({ title: 'Validação obrigatória', message: 'A conclusão exige registro da validação final da Qualidade.', tone: 'warning' });
         return;
       }
       patchDeviation(
@@ -485,13 +513,23 @@ export default function Deviations({ ctx }) {
         `${getKpiLabel(deviation.kpiKey)} • desvio concluído com validação final da Qualidade.`,
         `Desvio concluído. Validação final registrada: ${note.trim()}`
       );
+      notify({ title: 'Desvio concluído', message: `O desvio ${getKpiLabel(deviation.kpiKey)} foi concluído com sucesso.`, tone: 'success' });
       return;
     }
 
     if (next === 'VALIDADO_QUALIDADE') {
-      const note = window.prompt('Informe a validação da Qualidade:') || deviation.qualityValidationNotes || '';
+      const note = await promptAction({
+        title: 'Validar desvio pela Qualidade',
+        message: 'Informe o parecer da Qualidade para esta validação.',
+        label: 'Parecer da Qualidade',
+        placeholder: 'Descreva o parecer da Qualidade',
+        confirmText: 'Validar desvio',
+        required: true,
+        defaultValue: deviation.qualityValidationNotes || '',
+        tone: 'quality',
+      }) || deviation.qualityValidationNotes || '';
       if (!note.trim()) {
-        alert('A validação da Qualidade exige um parecer registrado.');
+        notify({ title: 'Parecer obrigatório', message: 'A validação da Qualidade exige um parecer registrado.', tone: 'warning' });
         return;
       }
       patchDeviation(
@@ -506,6 +544,7 @@ export default function Deviations({ ctx }) {
         `${getKpiLabel(deviation.kpiKey)} • desvio validado pela Qualidade.`,
         `Desvio validado pela Qualidade. Parecer: ${note.trim()}`
       );
+      notify({ title: 'Desvio validado', message: `A validação da Qualidade foi registrada para ${getKpiLabel(deviation.kpiKey)}.`, tone: 'quality' });
       return;
     }
 
@@ -517,6 +556,7 @@ export default function Deviations({ ctx }) {
       `${getKpiLabel(deviation.kpiKey)} • status alterado para ${statusLabel}.`,
       `Status alterado para ${statusLabel}.`
     );
+    notify({ title: 'Status do desvio atualizado', message: `${getKpiLabel(deviation.kpiKey)} foi movido para ${statusLabel}.`, tone: 'info' });
   }
 
   return (
