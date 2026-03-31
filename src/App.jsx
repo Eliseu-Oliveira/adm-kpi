@@ -9,6 +9,7 @@ import KpiMoagemSHO from "./pages/KpiMoagemSHO";
 import AuditTrail from "./pages/AuditTrail";
 import Users from "./pages/Users";
 import QualityPanel from "./pages/QualityPanel";
+import ControlRoom from "./pages/ControlRoom";
 import Login from "./pages/Login";
 import { canRole, clearSession, loadSession, saveSession, ROLE_LABELS } from "./auth";
 import { buildRoleNotifications } from "./notifications";
@@ -46,6 +47,7 @@ function AppShell({ state, setState, currentUser, login, logout }) {
     { to: "/cadastros", label: "Cadastros", permission: "MANAGE_MASTERS" },
     { to: "/usuarios", label: "Usuários & Permissões", permission: "MANAGE_USERS" },
     { to: "/auditoria", label: "Auditoria", permission: "MANAGE_DEVIATIONS" },
+    { to: "/sala-controle", label: "Sala de Controle", permission: "VIEW_DASHBOARD" },
   ].filter((item) => canRole(currentUser?.role, item.permission));
 
   async function handleReset() {
@@ -131,6 +133,7 @@ function AppShell({ state, setState, currentUser, login, logout }) {
                 <Route path="/usuarios" element={<Protected user={currentUser} allowed="MANAGE_USERS"><Users ctx={ctx} /></Protected>} />
                 <Route path="/painel-qualidade" element={<Protected user={currentUser} allowed="VALIDATE_DEVIATIONS"><QualityPanel ctx={ctx} /></Protected>} />
                 <Route path="/auditoria" element={<Protected user={currentUser} allowed="MANAGE_DEVIATIONS"><AuditTrail ctx={ctx} /></Protected>} />
+                <Route path="/sala-controle" element={<Protected user={currentUser} allowed="VIEW_DASHBOARD"><ControlRoom ctx={ctx} /></Protected>} />
                 <Route path="/kpi-moagem-sho" element={<Protected user={currentUser} allowed="VIEW_DASHBOARD"><KpiMoagemSHO ctx={ctx} /></Protected>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

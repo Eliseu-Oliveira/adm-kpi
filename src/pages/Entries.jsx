@@ -3,6 +3,7 @@ import { formatNumber, isoToday } from '../utils';
 import { appendAudit, createAuditEvent, getKpiLabel } from '../store';
 import { KPI_ORDER, buildAverageSeries } from '../chartHelpers';
 import TrendChart from '../components/TrendChart';
+import AlertCritical from '../components/AlertCritical';
 
 const SHIFTS = [
   { key: 'MANHA', label: 'Manhã' },
@@ -1160,9 +1161,7 @@ export default function Entries({ ctx }) {
           ))}
 
           {!!outOfSpecKpis.length && (
-            <div className="alertBox alertBad">
-              Existem {outOfSpecKpis.length} resultado(s) fora do limite. O salvamento só será permitido após preencher a ação obrigatória de cada desvio.
-            </div>
+            <AlertCritical count={outOfSpecKpis.length} />
           )}
 
 
